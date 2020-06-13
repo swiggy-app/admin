@@ -1,0 +1,37 @@
+node("maven-label") {
+   def mvnHome
+   stage('Preparation') { 
+      git branch: 'dev', url: 'https://github.com/swiggy-app/admin.git'
+      mvnHome = tool 'maven'
+   }
+   stage('Build') {
+      
+      withEnv(["MVN_HOME=$mvnHome"]) {
+         if (isUnix()) {
+            sh '"$MVN_HOME/bin/mvn" -Dmaven.test.failure.ignore clean install'
+         } else {
+            bat(/"%MVN_HOME%\bin\mvn" -Dmaven.test.failure.ignore clean package/)
+         }
+      }
+   }
+   stage('Results') {
+      junit '**/target/surefire-reports/TEST-*.xml'
+      archiveArtifacts 'target/*.jar'
+   }
+}
+node('docker-label'){
+    stage("Building the Docker image"){ 
+        sh 'docker build -t devopsjuly22017/swiggy:latest .'
+    }
+    stage("Docker image push"){
+        withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'password', usernameVariable: 'user')]) {
+            sh "docker login -u ${user} -p ${password}"
+            sh 'docker push devopsjuly22017/swiggy:lates'
+            sh 'docker rmi devopsjuly22017/swiggy:latest' 
+          }                        
+      }  
+ }   
+
+ node('dockerswarm-label'){
+    sh 'docker stack deploy -c swiggy-compose.yaml swiggyapp
+ } 
